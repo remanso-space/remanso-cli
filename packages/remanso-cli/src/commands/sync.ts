@@ -25,6 +25,15 @@ import {
 import { exitOnCancel } from "../../../cli/src/lib/prompts.ts";
 import process from "node:process";
 
+// PDS note content has image paths replaced with blob CIDs and internal markdown
+// links rewritten to AT URIs (see lib/note.ts processNoteContent). Strip both
+// constructs from each side so the comparison is symmetric.
+function normalizeNoteBodyForCompare(s: string): string {
+	return s
+		.replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+		.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+}
+
 async function matchesPDS(
 	localPost: BlogPost,
 	doc: ListDocumentsResult,
@@ -80,16 +89,19 @@ async function matchesPDS(
 				return false;
 			}
 
-			// Compare note body content up to 5000 chars.
-			// Beyond that, image paths are transformed to blob links in PDS,
-			// making direct comparison unreliable without re-uploading images.
+			// Compare normalized note body up to 5000 chars. Both sides go through
+			// normalizeNoteBodyForCompare to neutralize the image-path → blob and
+			// internal-link → at:// rewrites the publish path applies.
 			const pdsNoteContent = (noteValue.content as string | undefined) ?? "";
-			const localNoteContent = localPost.content.trim();
-			const compareLength = Math.min(localNoteContent.length, 5000);
+			const localNormalized = normalizeNoteBodyForCompare(
+				localPost.content.trim(),
+			);
+			const pdsNormalized = normalizeNoteBodyForCompare(pdsNoteContent);
+			const compareLength = Math.min(localNormalized.length, 5000);
 			if (
 				compareLength > 0 &&
-				pdsNoteContent.slice(0, compareLength) !==
-					localNoteContent.slice(0, compareLength)
+				pdsNormalized.slice(0, compareLength) !==
+					localNormalized.slice(0, compareLength)
 			) {
 				return false;
 			}
@@ -161,9 +173,8 @@ export const syncCommand = command({
 			process.exit(1);
 		}
 
-		const { config, configPath: resolvedConfigPath } = await loadConfig(
-			configPath,
-		);
+		const { config, configPath: resolvedConfigPath } =
+			await loadConfig(configPath);
 		const configDir = path.dirname(resolvedConfigPath);
 
 		log.info(`Publication: ${config.publicationUri}`);
