@@ -116,9 +116,8 @@ export const publishCommand = command({
 			process.exit(1);
 		}
 
-		const { config, configPath: resolvedConfigPath } = await loadConfig(
-			configPath,
-		);
+		const { config, configPath: resolvedConfigPath } =
+			await loadConfig(configPath);
 		const configDir = path.dirname(resolvedConfigPath);
 
 		log.info(`Content directory: ${config.contentDir}`);
@@ -209,7 +208,13 @@ export const publishCommand = command({
 		const postsToPublish: Array<{
 			post: BlogPost;
 			action: "create" | "update";
-			reason: "content changed" | "forced" | "new post" | "missing state";
+			reason:
+				| "content changed"
+				| "document changed"
+				| "note changed"
+				| "forced"
+				| "new post"
+				| "missing state";
 			updateDocument: boolean;
 			updateNote: boolean;
 		}> = [];
@@ -245,19 +250,28 @@ export const publishCommand = command({
 				const noteHash = await computeNoteHash(post);
 
 				const documentChanged = postState.contentHash !== contentHash;
-				// Treat absence of noteHash (legacy state) as changed so we populate it
+				// Legacy state (no noteHash): only republish the note when the file
+				// actually changed. If contentHash matches, we trust local and
+				// silently backfill noteHash below.
 				const noteChanged = postState.noteHash
 					? postState.noteHash !== noteHash
-					: true;
+					: documentChanged;
 
 				if (documentChanged || noteChanged) {
 					postsToPublish.push({
 						post,
 						action: post.frontmatter.atUri ? "update" : "create",
-						reason: "content changed",
+						reason:
+							documentChanged && noteChanged
+								? "content changed"
+								: documentChanged
+									? "document changed"
+									: "note changed",
 						updateDocument: documentChanged,
 						updateNote: noteChanged,
 					});
+				} else if (!postState.noteHash) {
+					postState.noteHash = noteHash;
 				}
 			}
 		}
@@ -389,14 +403,12 @@ export const publishCommand = command({
 			updateNote: boolean;
 		}> = [];
 
-		for (
-			const {
-				post,
-				action,
-				updateDocument: shouldUpdateDoc,
-				updateNote: shouldUpdateNote,
-			} of postsToPublish
-		) {
+		for (const {
+			post,
+			action,
+			updateDocument: shouldUpdateDoc,
+			updateNote: shouldUpdateNote,
+		} of postsToPublish) {
 			const trimmedContent = post.content.trim();
 			const titleMatch = trimmedContent.match(/^# (.+)$/m);
 			const title = titleMatch ? titleMatch[1] : post.frontmatter.title;
@@ -485,9 +497,8 @@ export const publishCommand = command({
 
 				noteQueue.push({ post, action, atUri, updateNote: shouldUpdateNote });
 			} catch (error) {
-				const errorMessage = error instanceof Error
-					? error.message
-					: String(error);
+				const errorMessage =
+					error instanceof Error ? error.message : String(error);
 				s.stop(`Error publishing "${path.basename(post.filePath)}"`);
 				log.error(`  ${errorMessage}`);
 				errorCount++;
@@ -495,9 +506,12 @@ export const publishCommand = command({
 		}
 
 		// Pass 2: Create/update Remanso notes
-		for (
-			const { post, action, atUri, updateNote: shouldUpdateNote } of noteQueue
-		) {
+		for (const {
+			post,
+			action,
+			atUri,
+			updateNote: shouldUpdateNote,
+		} of noteQueue) {
 			if (!shouldUpdateNote && action !== "create") continue;
 			const relativeFilePath = path.relative(configDir, post.filePath);
 			try {
