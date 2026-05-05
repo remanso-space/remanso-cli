@@ -123,7 +123,9 @@ async function processImages(
 			);
 			blob = await uploadBlob(agent, candidates);
 			if (!blob) {
-				console.warn(`Could not upload image: ${src} (checked: ${candidates.join(", ")})`);
+				console.warn(
+					`Could not upload image: ${src} (checked: ${candidates.join(", ")})`,
+				);
 				continue;
 			}
 			uploadCache.set(src, blob);
