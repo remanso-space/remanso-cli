@@ -414,6 +414,16 @@ describe("stripMarkdownForText", () => {
 		);
 	});
 
+	test("preserves ATProto embeds (e.g. audio) verbatim", () => {
+		const embed =
+			"![Accounting for Slavery - audio](at://did:plc:4m3kouplb7s7xozjd3whinvl/space.remanso.recording/3mrzjmp2nit22)";
+		expect(stripMarkdownForText(`before\n\n${embed}\n\nafter`)).toBe(
+			`before\n\n${embed}\n\nafter`,
+		);
+		// Also survives when the embed is at the start of the content (trim edge)
+		expect(stripMarkdownForText(`${embed} tail`)).toBe(`${embed} tail`);
+	});
+
 	test("removes code blocks", () => {
 		const input = "Before\n```js\nconst x = 1;\n```\nAfter";
 		expect(stripMarkdownForText(input)).toContain("Before");

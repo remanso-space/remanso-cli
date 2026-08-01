@@ -372,7 +372,19 @@ export function removeFrontmatterAtUri(rawContent: string): string {
 }
 
 export function stripMarkdownForText(markdown: string): string {
-	return markdown
+	// Preserve ATProto embeds (e.g. audio recordings) verbatim so the Remanso
+	// app can resolve the blob. These use ![alt](at://…) syntax and would
+	// otherwise be mangled by the link/image passes below.
+	const embeds: string[] = [];
+	const withPlaceholders = markdown.replace(
+		/!\[[^\]]*\]\(at:\/\/[^)]*\)/g,
+		(match) => {
+			embeds.push(match);
+			return ` ${embeds.length - 1} `;
+		},
+	);
+
+	const stripped = withPlaceholders
 		.replace(/#{1,6}\s/g, "") // Remove headers
 		.replace(/\*\*([^*]+)\*\*/g, "$1") // Remove bold
 		.replace(/\*([^*]+)\*/g, "$1") // Remove italic
@@ -382,6 +394,9 @@ export function stripMarkdownForText(markdown: string): string {
 		.replace(/!\[.*?\]\(.*?\)/g, "") // Remove images
 		.replace(/\n{3,}/g, "\n\n") // Normalize multiple newlines
 		.trim();
+
+	// Restore preserved embeds
+	return stripped.replace(/ (\d+) /g, (_, i) => embeds[Number(i)]!);
 }
 
 export function getTextContent(

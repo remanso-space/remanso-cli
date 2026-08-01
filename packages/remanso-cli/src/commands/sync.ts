@@ -28,10 +28,21 @@ import process from "node:process";
 // PDS note content has image paths replaced with blob CIDs and internal markdown
 // links rewritten to AT URIs (see lib/note.ts processNoteContent). Strip both
 // constructs from each side so the comparison is symmetric.
+//
+// ATProto embeds (e.g. audio recordings, ![alt](at://…)) are NOT rewritten by
+// the publish path — they stay identical on both sides — so preserve them.
+// Stripping them would hide a changed/added/removed recording and let sync mark
+// the note "unchanged", skipping the republish.
 function normalizeNoteBodyForCompare(s: string): string {
+	const embeds: string[] = [];
 	return s
+		.replace(/!\[[^\]]*\]\(at:\/\/[^)]*\)/g, (match) => {
+			embeds.push(match);
+			return `\x00${embeds.length - 1}\x00`;
+		})
 		.replace(/!\[[^\]]*\]\([^)]*\)/g, "")
-		.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+		.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+		.replace(/\x00(\d+)\x00/g, (_, i) => embeds[Number(i)]!);
 }
 
 async function matchesPDS(

@@ -111,6 +111,9 @@ async function processImages(
 		const fullMatch = match[0];
 		const alt = match[1] ?? "";
 		const src = match[2]!;
+		// ATProto embeds (e.g. audio recordings, at://…) are not files to upload;
+		// leave them verbatim so the Remanso app can resolve the blob.
+		if (src.startsWith("at://")) continue;
 		if (!isLocalPath(src)) continue;
 
 		let blob = uploadCache.get(src);
